@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "references": [
+    { "path": "server" },
+    { "path": "client" }
+  ]
+}

@@ -1,0 +1,28 @@
+
+.object-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+.object-card {
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 16px;
+  cursor: pointer;
+  background: #fafafa;
+  transition: box-shadow .2s;
+}
+.object-card:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+.alert-icon {
+  color: red;
+  font-size: 1.2em;
+}
+
+body {
+    text-align: center;
+    display: grid;
+    justify-content: center;
+}

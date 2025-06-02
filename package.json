@@ -1,0 +1,17 @@
+{
+  "name": "worksitegraphs",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["client", "server"],
+  "scripts": {
+    "start:server": "npm run dev --prefix server",
+    "build:server": "npm run build --prefix server",
+    "start:client": "npm start --prefix client",
+    "build:client": "npm run build --prefix client",
+    "start": "concurrently \"npm run start:server\" \"npm run start:client\"",
+    "build": "npm run build:server && npm run build:client"
+  },
+  "devDependencies": {
+    "concurrently": "^7.6.0"
+  }
+}
