@@ -19,6 +19,12 @@ const pool = new Pool({
   database: process.env.DB_NAME,
 });
 
+const STANDARD_SENSORS_CONFIG = {
+  temperature: { name: 'Датчик Температуры 1', unit: 'Градус Цельсия' },
+  voltage: { name: 'Датчик Напряжения 1', unit: 'Вольт' },
+  current: { name: 'Датчик Тока 1', unit: 'Ампер' },
+};
+
 async function startServer() {
   const app = express();
   app.use(cors());
@@ -37,6 +43,73 @@ async function startServer() {
     } catch (err) {
       console.error('Error fetching stations:', err);
       res.status(500).json({ error: 'Failed to fetch stations' });
+    }
+  });
+
+  // New Endpoint: GET /api/station-sensors-by-object/:referenceObjectId
+  app.get('/api/station-sensors-by-object/:referenceObjectId', async (req: Request, res: Response) => {
+    const { referenceObjectId } = req.params;
+    try {
+      // 1. Fetch station_id for the referenceObjectId
+      const stationQuery = await pool.query(
+        'SELECT station_id FROM objects WHERE id = $1',
+        [referenceObjectId]
+      );
+
+      if (stationQuery.rows.length === 0) {
+        return res.status(404).json({ error: 'Reference object not found' });
+      }
+      const stationId = stationQuery.rows[0].station_id;
+
+      if (!stationId) {
+        // Should not happen if DB constraints are set, but good check
+        return res.status(404).json({ error: 'Station not found for the reference object' });
+      }
+
+      // 2. Fetch IDs for each standard sensor type within that station
+      let temperatureSensorId: number | null = null;
+      let voltageSensorId: number | null = null;
+      let currentSensorId: number | null = null;
+
+      // Temperature Sensor
+      const tempConfig = STANDARD_SENSORS_CONFIG.temperature;
+      const tempResult = await pool.query(
+        'SELECT id FROM objects WHERE station_id = $1 AND name = $2 AND unit = $3',
+        [stationId, tempConfig.name, tempConfig.unit]
+      );
+      if (tempResult.rows.length > 0) {
+        temperatureSensorId = tempResult.rows[0].id;
+      }
+
+      // Voltage Sensor
+      const voltageConfig = STANDARD_SENSORS_CONFIG.voltage;
+      const voltageResult = await pool.query(
+        'SELECT id FROM objects WHERE station_id = $1 AND name = $2 AND unit = $3',
+        [stationId, voltageConfig.name, voltageConfig.unit]
+      );
+      if (voltageResult.rows.length > 0) {
+        voltageSensorId = voltageResult.rows[0].id;
+      }
+
+      // Current Sensor
+      const currentConfig = STANDARD_SENSORS_CONFIG.current;
+      const currentResult = await pool.query(
+        'SELECT id FROM objects WHERE station_id = $1 AND name = $2 AND unit = $3',
+        [stationId, currentConfig.name, currentConfig.unit]
+      );
+      if (currentResult.rows.length > 0) {
+        currentSensorId = currentResult.rows[0].id;
+      }
+
+      res.json({
+        temperatureSensorId,
+        voltageSensorId,
+        currentSensorId,
+      });
+
+    } catch (err) {
+      console.error(`Error fetching associated sensor IDs for reference object ${referenceObjectId}:`, err);
+      res.status(500).json({ error: 'Failed to fetch associated sensor IDs' });
     }
   });
 
