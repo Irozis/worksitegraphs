@@ -5,51 +5,176 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 1000; /* Ensure modal is on top */
 }
+
 .modal-window {
-  background: #111;
+  background: #1a1a1a; /* Slightly lighter dark shade */
   padding: 20px;
   border-radius: 8px;
-  color: #FFD014;
-  max-width: 100%;
-  overflow: hidden;
+  color: #FFD014; /* Default text color for the modal */
+  max-width: 1400px; /* Wider for three charts + table */
+  width: 95%; /* Responsive width */
+  max-height: 90vh; /* Max height */
+  overflow: hidden; /* Hide direct overflow, children will scroll */
+  display: flex;
+  flex-direction: column; /* Stack controls, main content, etc. */
+  box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+  position: relative; /* Added from inline style, for absolute positioning of close button */
 }
+
 .close-button {
   position: absolute;
-  top: 12px; right: 12px;
+  top: 15px; right: 15px; /* Adjusted for padding */
   background: none;
   border: none;
   color: #FFD014;
-  font-size: 24px;
+  font-size: 28px; /* Slightly larger */
   cursor: pointer;
+  line-height: 1; /* Ensure consistent positioning */
 }
-.modal-title {
-  margin: 0 0 16px;
+
+.modal-title { /* This class might not be used anymore, but good to have */
+  margin: 0 0 20px; /* Increased bottom margin */
   font-family: 'Roboto', sans-serif;
+  text-align: center;
 }
+
+.modal-controls {
+  margin-bottom: 20px; /* Space below global controls */
+  padding-bottom: 15px; /* Padding for separation */
+  border-bottom: 1px solid #333; /* Separator line */
+  display: flex; /* Align global controls */
+  flex-wrap: wrap; /* Allow wrapping */
+  gap: 15px; /* Space between control items */
+  align-items: center;
+}
+
 .modal-controls label {
-  margin-right: 12px;
+  margin-right: 0; /* Remove old margin, gap handles spacing */
   font-family: 'Roboto', sans-serif;
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
+
+.modal-controls input[type="datetime-local"],
+.modal-controls input[type="number"] {
+  background-color: #222;
+  color: #FFD014;
+  border: 1px solid #444;
+  padding: 5px 8px;
+  border-radius: 4px;
+}
+
 .csv-button {
-  margin-left: 12px;
-  padding: 4px 8px;
+  margin-left: auto; /* Push to the right if space allows */
+  padding: 6px 12px; /* Slightly larger padding */
   border: 1px solid #FFD014;
-  background: none;
+  background: #333; /* Darker background */
   color: #FFD014;
   cursor: pointer;
   font-family: 'Roboto', sans-serif;
+  border-radius: 4px;
 }
-.chart-table-container {
+.csv-button:hover {
+  background: #FFD014;
+  color: #111;
+}
+
+.main-content-area {
   display: flex;
-  margin-top: 16px;
+  gap: 20px; /* Space between charts area and data table */
+  flex-grow: 1; /* Take available vertical space */
+  overflow: hidden; /* Prevent this container from scrolling */
+}
+
+.all-charts-area {
+  flex: 3; /* Charts take more space */
+  display: flex;
+  flex-direction: column;
+  gap: 20px; /* Consistent spacing between chart wrappers */
+  overflow-y: auto; /* Allow scrolling for the list of charts */
+  padding-right: 10px; /* Space for scrollbar to not overlap content */
+  background-color: #111; /* Background for the charts area */
+  padding: 10px;
+  border-radius: 4px;
+}
+
+.chart-wrapper {
+  border: 1px solid #2a2a2a; /* Slightly visible border */
+  padding: 15px;
+  border-radius: 6px;
+  background-color: #1f1f1f; /* Individual chart background */
+  /* margin-bottom is handled by gap in .all-charts-area if preferred, else use margin-bottom: 20px; */
+}
+
+.chart-wrapper h3 {
+  color: #FFD014;
+  text-align: center;
+  margin-top: 0;
+  margin-bottom: 15px; /* Increased space */
+  font-size: 1.1em;
+}
+
+.metric-controls {
+  display: flex;
+  justify-content: center;
+  gap: 20px; /* Increased gap */
+  margin-bottom: 15px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.metric-controls label {
+  color: #FFD014;
+  display: flex;
+  align-items: center;
+  gap: 8px; /* Increased gap */
+}
+
+.metric-controls input[type="text"] {
+  width: 70px; /* Standardized width */
+  background-color: #222;
+  color: #FFD014;
+  border: 1px solid #444;
+  padding: 5px 8px; /* Consistent padding */
+  border-radius: 4px;
+}
+
+/* Styling for Recharts components if needed, targeting their generated class names */
+.recharts-wrapper {
+  background-color: #000; /* Default from inline, can be here */
+  font-family: 'Roboto', sans-serif; /* Default from inline */
+}
+.recharts-cartesian-axis-tick-value tspan {
+  fill: #FFD014 !important; /* Ensure tick values are visible */
+}
+
+
+.data-table-wrapper {
+  flex: 1; /* Table takes less space */
+  display: flex; /* Allow child to fill height */
+  flex-direction: column;
+  min-width: 280px; /* Minimum width for the table area */
+  max-height: calc(3 * (300px + 15px + 15px + 20px) + 2 * 20px); /* Approx height of 3 charts + controls + gap. (chart height + h3 margin + metric_control_margin_bottom + chart_wrapper_padding) + all_charts_area_gap*/
+  overflow-y: auto; /* Scroll if table content is too long */
+  background-color: #111;
+  padding:10px;
+  border-radius: 4px;
 }
 
 .data-table {
+  width: 100%;
+  height: 100%; /* Fill the wrapper */
+  overflow-y: auto; /* Already has this but good to ensure */
+}
 
-  height: 700px;
-  overflow-y: auto;
-  width: 300px;
+.data-table h4 {
+  color: #FFD014;
+  text-align: center;
+  margin-top: 0;
+  margin-bottom: 10px;
 }
 
 .data-table table {
@@ -58,6 +183,10 @@
 }
 .data-table th,
 .data-table td {
-  padding: 4px 8px;
+  padding: 6px 10px; /* Increased padding */
   border: 1px solid #333;
+  font-size: 0.9em;
+}
+.data-table th {
+  background-color: #2a2a2a; /* Header background */
 }
