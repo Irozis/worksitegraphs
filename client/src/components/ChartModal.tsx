@@ -81,6 +81,7 @@ const ChartModal: React.FC<ChartModalProps> = ({
   const [start, setStart] = useState<string>(fmt(ago24h));
   const [end, setEnd] = useState<string>(fmt(now));
   const [intervalMin, setIntervalMin] = useState<number>(5);
+  const [refreshKey, setRefreshKey] = useState(Date.now());
 
   const initialMetricsData: Record<Metric, ChartMetricState> = {
     temperature: {
@@ -107,20 +108,37 @@ const ChartModal: React.FC<ChartModalProps> = ({
   // const [minBound, setMinBound] = useState<string>(''); // Replaced by metricsData
   // const [maxBound, setMaxBound] = useState<string>(''); // Replaced by metricsData
 
+  // --- Polling useEffect for data refresh ---
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | undefined = undefined;
+
+    if (visible) {
+      // Optionally trigger an immediate refresh when modal becomes visible if not relying on initial load by other params
+      // setRefreshKey(Date.now()); // This might cause a double fetch if other params also change on visible
+
+      intervalId = setInterval(() => {
+        setRefreshKey(Date.now());
+      }, 60000); // 60 seconds
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [visible]);
+
   // --- Data Fetching for each metric ---
-  const commonQueryParams = `start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&intervalMinutes=${intervalMin}`;
+  const commonQueryParams = `start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&intervalMinutes=${intervalMin}&_cb=${refreshKey}`;
 
   const { data: tempData } = useFetch<{ timestamp: string; value: number }[]>(
-    `/api/objects/${objectId}/data?type=temperature&${commonQueryParams}`,
-    [start, end, intervalMin, objectId] // Dependencies for useFetch
+    `/api/objects/${objectId}/data?type=temperature&${commonQueryParams}`
   );
   const { data: currentData } = useFetch<{ timestamp: string; value: number }[]>(
-    `/api/objects/${objectId}/data?type=current&${commonQueryParams}`,
-    [start, end, intervalMin, objectId] // Dependencies for useFetch
+    `/api/objects/${objectId}/data?type=current&${commonQueryParams}`
   );
   const { data: voltageData } = useFetch<{ timestamp: string; value: number }[]>(
-    `/api/objects/${objectId}/data?type=voltage&${commonQueryParams}`,
-    [start, end, intervalMin, objectId] // Dependencies for useFetch
+    `/api/objects/${objectId}/data?type=voltage&${commonQueryParams}`
   );
 
   // --- Update rawData in metricsData state when fetched data changes ---
