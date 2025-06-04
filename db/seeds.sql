@@ -4,7 +4,7 @@ ON CONFLICT (name) DO NOTHING;
 
 -- Ensure specific sensor objects exist for the default station
 WITH station_cte AS (
-    SELECT id FROM stations WHERE name = 'Главный Распределительный Щит' LIMIT 1 -- Ensure we get one ID if somehow duplicates existed (though name is unique)
+    SELECT id FROM stations WHERE name = 'Главный Распределительный Щит' LIMIT 1 -- Ensure we get one ID if somehow duplicates existed (though name is unique on stations)
 ),
 sensor_definitions (name, unit) AS (
     VALUES
@@ -15,12 +15,9 @@ sensor_definitions (name, unit) AS (
 INSERT INTO objects (station_id, name, unit)
 SELECT s.id, sd.name, sd.unit
 FROM station_cte s, sensor_definitions sd
--- This ON CONFLICT targets the 'name' column for conflict.
--- If an object with the same 'name' exists anywhere, it will do nothing.
--- This is a simplification for seeding. A more robust check might be
--- ON CONFLICT (station_id, name) DO NOTHING if that constraint existed,
--- or an INSERT...WHERE NOT EXISTS pattern.
-ON CONFLICT (name) DO NOTHING;
+-- Use the unique constraint added to the objects table (station_id, name, unit)
+-- to prevent duplicates if the seed script is run multiple times.
+ON CONFLICT (station_id, name, unit) DO NOTHING;
 
 -- 1) Очистим старые измерения
 -- Using CASCADE because measurements table has foreign key to objects

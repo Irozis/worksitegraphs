@@ -9,7 +9,8 @@ CREATE TABLE objects (
   name        TEXT   NOT NULL,
   unit        TEXT   NOT NULL,           -- 'Вольт', 'Ампер', 'Градус Цельсия' и т.д.
   description TEXT   DEFAULT '',
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT unique_station_object_name_unit UNIQUE (station_id, name, unit)
 );
 
 CREATE TABLE measurements (
