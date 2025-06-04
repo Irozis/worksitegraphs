@@ -32,17 +32,13 @@ interface ChartMetricState {
   maxBound: string;
 }
 
-interface SensorIdState {
-  temperature: number | null;
-  current: number | null;
-  voltage: number | null;
-}
+// SensorIdState interface is removed.
 
 interface ChartModalProps {
   visible: boolean;
   onClose: () => void;
-  objectId: number;
-  type: Metric;
+  objectId: number; // This is now compositeDeviceId
+  type: Metric; // This prop is used as a fallback for CSV/Table title, and to pick from metricsData for these.
   onAlert?: (timestamp: string, value: number) => void;
 }
 
@@ -84,13 +80,12 @@ const ChartModal: React.FC<ChartModalProps> = ({
   const ago24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const fmt = (d: Date) => d.toISOString().slice(0, 16);
 
-  const [start, setStart] = useState<string>(fmt(ago2ah));
+  const [start, setStart] = useState<string>(fmt(ago24h)); // Corrected ago2ah to ago24h
   const [end, setEnd] = useState<string>(fmt(now));
   const [intervalMin, setIntervalMin] = useState<number>(5);
   const [refreshKey, setRefreshKey] = useState(Date.now());
 
-  const [sensorIds, setSensorIds] = useState<SensorIdState>({ temperature: null, current: null, voltage: null });
-  const [sensorIdsLoading, setSensorIdsLoading] = useState(true);
+  // sensorIds and sensorIdsLoading states are removed.
 
   const initialMetricsData: Record<Metric, ChartMetricState> = {
     temperature: {
@@ -117,37 +112,7 @@ const ChartModal: React.FC<ChartModalProps> = ({
   // const [minBound, setMinBound] = useState<string>(''); // Replaced by metricsData
   // const [maxBound, setMaxBound] = useState<string>(''); // Replaced by metricsData
 
-  // --- Effect to fetch associated sensor IDs ---
-  useEffect(() => {
-    if (visible && objectId) {
-      setSensorIdsLoading(true);
-      fetch(`/api/station-sensors-by-object/${objectId}`)
-        .then(res => {
-          if (!res.ok) {
-            throw new Error(`Failed to fetch sensor IDs: ${res.status}`);
-          }
-          return res.json();
-        })
-        .then((data: { temperatureSensorId: number | null; voltageSensorId: number | null; currentSensorId: number | null }) => {
-          setSensorIds({
-            temperature: data.temperatureSensorId,
-            current: data.currentSensorId,
-            voltage: data.voltageSensorId,
-          });
-        })
-        .catch(error => {
-          console.error("Error fetching sensor IDs:", error);
-          setSensorIds({ temperature: null, current: null, voltage: null }); // Reset on error
-        })
-        .finally(() => {
-          setSensorIdsLoading(false);
-        });
-    } else if (!visible) {
-      // Reset when modal is hidden
-      setSensorIds({ temperature: null, current: null, voltage: null });
-      setSensorIdsLoading(true);
-    }
-  }, [objectId, visible]);
+  // Effect for fetching sensor IDs is removed.
 
   // --- Polling useEffect for data refresh ---
   useEffect(() => {
@@ -172,40 +137,48 @@ const ChartModal: React.FC<ChartModalProps> = ({
   // --- Data Fetching for each metric ---
   const commonQueryParams = `start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&intervalMinutes=${intervalMin}&_cb=${refreshKey}`;
 
-  // Fetch data only if the specific sensor ID is available
+  // Fetch data using compositeDeviceId (objectId prop) and type for each metric
+  // Conditional fetch based on objectId prop (truthy)
   const { data: tempData } = useFetch<{ timestamp: string; value: number }[]>(
-    sensorIds.temperature ? `/api/objects/${sensorIds.temperature}/data?type=temperature&${commonQueryParams}` : null
+    objectId ? `/api/composite-devices/${objectId}/data?type=temperature&${commonQueryParams}` : null
   );
   const { data: currentData } = useFetch<{ timestamp: string; value: number }[]>(
-    sensorIds.current ? `/api/objects/${sensorIds.current}/data?type=current&${commonQueryParams}` : null
+    objectId ? `/api/composite-devices/${objectId}/data?type=current&${commonQueryParams}` : null
   );
   const { data: voltageData } = useFetch<{ timestamp: string; value: number }[]>(
-    sensorIds.voltage ? `/api/objects/${sensorIds.voltage}/data?type=voltage&${commonQueryParams}` : null
+    objectId ? `/api/composite-devices/${objectId}/data?type=voltage&${commonQueryParams}` : null
   );
 
   // --- Update rawData in metricsData state when fetched data changes ---
-  // Reset rawData if sensorId becomes null (e.g. modal hidden, then shown with different objectId)
+  // useEffects for resetting data based on sensorIds are removed.
+  // useFetch returning null for data (or if objectId is null) will ensure tempData/currentData/voltageData are null,
+  // which then clears rawData.
   useEffect(() => {
-    if (!sensorIds.temperature) {
-      setMetricsData(prev => ({...prev, temperature: { ...prev.temperature, rawData: undefined, chartData: [] }}));
-    }
-  }, [sensorIds.temperature]);
+    setMetricsData(prev => ({
+      ...prev,
+      // If tempData is null (e.g. from a disabled fetch or error), set rawData to undefined to clear chart.
+      temperature: { ...prev.temperature, rawData: tempData === null ? undefined : tempData },
+    }));
+  }, [tempData]);
 
   useEffect(() => {
-    if (!sensorIds.current) {
-      setMetricsData(prev => ({...prev, current: { ...prev.current, rawData: undefined, chartData: [] }}));
-    }
-  }, [sensorIds.current]);
+    setMetricsData(prev => ({
+      ...prev,
+      current: { ...prev.current, rawData: currentData === null ? undefined : currentData },
+    }));
+  }, [currentData]);
 
   useEffect(() => {
-    if (!sensorIds.voltage) {
-      setMetricsData(prev => ({...prev, voltage: { ...prev.voltage, rawData: undefined, chartData: [] }}));
-    }
-  }, [sensorIds.voltage]);
+    setMetricsData(prev => ({
+      ...prev,
+      voltage: { ...prev.voltage, rawData: voltageData === null ? undefined : voltageData },
+    }));
+  }, [voltageData]);
 
+  /* Old rawData update logic (now removed/simplified by the above):
   useEffect(() => {
     if (tempData) {
-      setMetricsData(prev => ({
+        setMetricsData(prev => ({
         ...prev,
         temperature: { ...prev.temperature, rawData: tempData },
       }));
@@ -302,31 +275,27 @@ const ChartModal: React.FC<ChartModalProps> = ({
 
   // CSV из объединенных данных - uses 'type' prop to select which metric to export
   // This part might need rethinking if 'type' prop is fully deprecated.
-  // For now, it uses the original 'type' prop to select one of the three metrics.
+  // For now, it uses the original 'type' prop to select one of the three metrics for CSV.
   const csvContent = useMemo(() => {
-    // If sensorIdsLoading is true, or the specific sensorId for 'type' is null, don't generate CSV
-    if (sensorIdsLoading || !sensorIds[type]) {
-        return '';
-    }
-    const currentMetricChartData = metricsData[type]?.chartData;
+    const currentMetricChartData = metricsData[type]?.chartData; // 'type' prop selects which metric's data
     if (!currentMetricChartData || !currentMetricChartData.length) return '';
     const header = ['timestamp', 'value'];
     const rows = currentMetricChartData.map(d => [d.timestamp, d.value != null ? String(d.value) : '']);
     return [header, ...rows].map(r => r.join(',')).join('\n');
-  }, [metricsData, type, start, end, sensorIds, sensorIdsLoading]);
+  }, [metricsData, type, start, end]); // Removed sensorIds, sensorIdsLoading dependencies
 
   const downloadCsv = () => {
-    if (sensorIdsLoading || !sensorIds[type]) {
-        alert("Данные для выбранного типа CSV еще загружаются или отсутствуют.");
+    // Check if data for the 'type' (prop) metric is available
+    if (!metricsData[type]?.chartData || metricsData[type].chartData.length === 0) {
+        alert("Нет данных для экспорта для выбранного типа."); // More generic message
         return;
     }
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    // Use the specific sensor ID in the filename if available, otherwise fallback to type
-    const objectIdForFilename = sensorIds[type] || type;
-    a.download = `object_${objectIdForFilename}_${start}_${end}.csv`;
+    // Filename uses the main objectId (compositeDeviceId from prop) and the 'type' prop for context
+    a.download = `composite_device_${objectId}_${type}_${start}_${end}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -375,18 +344,17 @@ const ChartModal: React.FC<ChartModalProps> = ({
           </button>
         </div>
 
-        <div className="main-content-area"> {/* New parent container for charts and table */}
+        <div className="main-content-area">
           <div className="all-charts-area">
-            {sensorIdsLoading && <div style={{textAlign: 'center', color: '#aaa', padding: '20px'}}>Загрузка идентификаторов датчиков...</div>}
-            {!sensorIdsLoading && metricsToRender.map(metricKey => {
+            {/* sensorIdsLoading related message is removed. Loading is per chart via useFetch. */}
+            {metricsToRender.map(metricKey => {
               const currentMetricData = metricsData[metricKey];
-              const specificSensorId = sensorIds[metricKey];
-              // Show "No Data" if the specific sensor ID wasn't found OR if chartData is empty/all nulls
-              const noData = !specificSensorId || currentMetricData.chartData.every(pt => pt.value === null) || currentMetricData.chartData.length === 0;
+              // "No Data" logic simplifies as backend now returns empty data if a specific sensor type isn't found for the composite device
+              const noData = currentMetricData.chartData.every(pt => pt.value === null) || currentMetricData.chartData.length === 0;
 
               return (
                 <div key={metricKey} className="chart-wrapper">
-                  <h3>{titleMap[metricKey]} {specificSensorId ? `(ID: ${specificSensorId})` : '(ID не найден)'}</h3>
+                  <h3>{titleMap[metricKey]}</h3> {/* Removed (ID: ...) from title */}
                   <div className="metric-controls">
                     <label>
                       Мин:{' '}
@@ -419,7 +387,8 @@ const ChartModal: React.FC<ChartModalProps> = ({
                         textAlign: 'center',
                         zIndex: 10, // Ensure it's above chart grid
                       }}>
-                        {!specificSensorId ? 'Датчик не найден для этого объекта' : 'Нет данных за выбранный период'}
+                        {/* Simplified "No Data" message. Backend returns empty data if sensor type not on composite device. */}
+                        Нет данных за выбранный период
                       </div>
                     )}
                     <ResponsiveContainer width="100%" height="100%">
@@ -533,19 +502,25 @@ const ChartModal: React.FC<ChartModalProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {metricsData[type].chartData.map((d, i) => { // Display table data for the metric specified by 'type' prop
-                  const num = d.value == null ? NaN : Number(d.value);
-                  return (
-                    <tr key={`${d.timestamp}-${i}`}>
-                      <td style={{ color: '#FFD014' }}>
-                        {new Date(d.timestamp).toLocaleString()}
-                      </td>
-                      <td style={{ color: '#FFD014' }}>
-                        {isNaN(num) ? '—' : num.toFixed(2)}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {/* Data table no longer needs to check sensorIdsLoading or sensorIds[type] explicitly here,
+                    as metricsData[type].chartData will be empty if no data was fetched for that type. */}
+                {metricsData[type].chartData.length > 0 ? (
+                  metricsData[type].chartData.map((d, i) => {
+                    const num = d.value == null ? NaN : Number(d.value);
+                    return (
+                      <tr key={`${d.timestamp}-${i}`}>
+                        <td style={{ color: '#FFD014' }}>
+                          {new Date(d.timestamp).toLocaleString()}
+                        </td>
+                        <td style={{ color: '#FFD014' }}>
+                          {isNaN(num) ? '—' : num.toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr><td colSpan={2} style={{textAlign: 'center', color: '#aaa'}}>Нет данных для отображения.</td></tr>
+                )}
               </tbody>
             </table>
           </div>

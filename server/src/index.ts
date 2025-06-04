@@ -19,11 +19,9 @@ const pool = new Pool({
   database: process.env.DB_NAME,
 });
 
-const STANDARD_SENSORS_CONFIG = {
-  temperature: { name: 'Датчик Температуры 1', unit: 'Градус Цельсия' },
-  voltage: { name: 'Датчик Напряжения 1', unit: 'Вольт' },
-  current: { name: 'Датчик Тока 1', unit: 'Ампер' },
-};
+// STANDARD_SENSORS_CONFIG removed as it's no longer used by these refactored endpoints.
+// Its equivalent logic for data generation is in dataGenerator.ts
+// and for API data fetching, typeToUnitMap is used directly.
 
 async function startServer() {
   const app = express();
@@ -46,153 +44,88 @@ async function startServer() {
     }
   });
 
-  // New Endpoint: GET /api/station-sensors-by-object/:referenceObjectId
-  app.get('/api/station-sensors-by-object/:referenceObjectId', async (req: Request, res: Response) => {
-    const { referenceObjectId } = req.params;
-    try {
-      // 1. Fetch station_id for the referenceObjectId
-      const stationQuery = await pool.query(
-        'SELECT station_id FROM objects WHERE id = $1',
-        [referenceObjectId]
-      );
-
-      if (stationQuery.rows.length === 0) {
-        return res.status(404).json({ error: 'Reference object not found' });
-      }
-      const stationId = stationQuery.rows[0].station_id;
-
-      if (!stationId) {
-        // Should not happen if DB constraints are set, but good check
-        return res.status(404).json({ error: 'Station not found for the reference object' });
-      }
-
-      // 2. Fetch IDs for each standard sensor type within that station
-      let temperatureSensorId: number | null = null;
-      let voltageSensorId: number | null = null;
-      let currentSensorId: number | null = null;
-
-      // Temperature Sensor
-      const tempConfig = STANDARD_SENSORS_CONFIG.temperature;
-      const tempResult = await pool.query(
-        'SELECT id FROM objects WHERE station_id = $1 AND name = $2 AND unit = $3',
-        [stationId, tempConfig.name, tempConfig.unit]
-      );
-      if (tempResult.rows.length > 0) {
-        temperatureSensorId = tempResult.rows[0].id;
-      }
-
-      // Voltage Sensor
-      const voltageConfig = STANDARD_SENSORS_CONFIG.voltage;
-      const voltageResult = await pool.query(
-        'SELECT id FROM objects WHERE station_id = $1 AND name = $2 AND unit = $3',
-        [stationId, voltageConfig.name, voltageConfig.unit]
-      );
-      if (voltageResult.rows.length > 0) {
-        voltageSensorId = voltageResult.rows[0].id;
-      }
-
-      // Current Sensor
-      const currentConfig = STANDARD_SENSORS_CONFIG.current;
-      const currentResult = await pool.query(
-        'SELECT id FROM objects WHERE station_id = $1 AND name = $2 AND unit = $3',
-        [stationId, currentConfig.name, currentConfig.unit]
-      );
-      if (currentResult.rows.length > 0) {
-        currentSensorId = currentResult.rows[0].id;
-      }
-
-      res.json({
-        temperatureSensorId,
-        voltageSensorId,
-        currentSensorId,
-      });
-
-    } catch (err) {
-      console.error(`Error fetching associated sensor IDs for reference object ${referenceObjectId}:`, err);
-      res.status(500).json({ error: 'Failed to fetch associated sensor IDs' });
-    }
-  });
-
-  // 2) GET /api/stations/:stationName/objects
-  app.get('/api/stations/:stationName/objects', async (req: Request, res: Response) => {
+  // Endpoint to get composite devices for a station
+  // OLD Path: /api/stations/:stationName/objects
+  // NEW: returns composite_devices, not sensors/objects directly
+  app.get('/api/stations/:stationName/composite-devices', async (req: Request, res: Response) => {
     try {
       const stationName = req.params.stationName;
       const { rows } = await pool.query<{
         id: number;
         name: string;
-        unit: string;
         description: string;
-        created_at: Date;
+        // created_at for composite_devices is not in schema, add if needed by frontend
       }>(
         `
-        SELECT o.id, o.name, o.unit, o.description, o.created_at
-        FROM objects o
-        JOIN stations s ON o.station_id = s.id
+        SELECT cd.id, cd.name, cd.description
+        FROM composite_devices cd
+        JOIN stations s ON cd.station_id = s.id
         WHERE s.name = $1
-        ORDER BY o.name;
+        ORDER BY cd.name;
         `,
         [stationName]
       );
       res.json(rows.map(r => ({
         id:          r.id,
         name:        r.name,
-        unit:        r.unit,
+        // unit:        null, // Unit is not directly applicable to composite device
         location:    stationName,
         description: r.description,
-        createdAt:   r.created_at.toISOString(),
-        hasAlert:    false,
+        // createdAt:   r.created_at?.toISOString(), // Add if created_at is added to composite_devices
+        hasAlert:    false, // Placeholder, logic can be added later
       })));
     } catch (err) {
-      console.error('Error fetching objects for station:', err);
-      res.status(500).json({ error: 'Failed to fetch objects' });
+      console.error('Error fetching composite devices for station:', err);
+      res.status(500).json({ error: 'Failed to fetch composite devices' });
     }
   });
 
-  // 3) GET /api/objects/:objectId
-  app.get('/api/objects/:objectId', async (req: Request, res: Response) => {
+  // Endpoint to get details of a specific composite device
+  // OLD Path: /api/objects/:objectId
+  // NEW Path: /api/composite-devices/:compositeDeviceId
+  app.get('/api/composite-devices/:compositeDeviceId', async (req: Request, res: Response) => {
     try {
-      const objectId = Number(req.params.objectId);
+      const compositeDeviceId = Number(req.params.compositeDeviceId);
       const { rows } = await pool.query<{
         id: number;
         name: string;
-        unit: string;
         description: string;
-        created_at: Date;
-        station: string;
+        station_name: string; // Renamed from 'station' for clarity
+        // created_at for composite_devices is not in schema
       }>(
         `
-        SELECT o.id, o.name, o.unit, o.description, o.created_at, s.name AS station
-        FROM objects o
-        JOIN stations s ON o.station_id = s.id
-        WHERE o.id = $1;
+        SELECT cd.id, cd.name, cd.description, s.name AS station_name
+        FROM composite_devices cd
+        JOIN stations s ON cd.station_id = s.id
+        WHERE cd.id = $1;
         `,
-        [objectId]
+        [compositeDeviceId]
       );
       if (rows.length === 0) {
-        return res.status(404).json({ error: 'Object not found' });
+        return res.status(404).json({ error: 'Composite device not found' });
       }
       const r = rows[0];
       res.json({
         id:          r.id,
         name:        r.name,
-        unit:        r.unit,
-        location:    r.station,
+        // unit:        null, // Unit not applicable
+        location:    r.station_name,
         description: r.description,
-        createdAt:   r.created_at.toISOString(),
-        photoUrl:    '',      // при необходимости заполните URL фотографии
+        // createdAt:   r.created_at?.toISOString(), // Add if created_at is added
+        photoUrl:    '', // Placeholder
       });
     } catch (err) {
-      console.error('Error fetching object details:', err);
-      res.status(500).json({ error: 'Failed to fetch object' });
+      console.error('Error fetching composite device details:', err);
+      res.status(500).json({ error: 'Failed to fetch composite device' });
     }
   });
 
-  // 4) GET /api/objects/:objectId/data
-  //    Возвращает ровно (end–start)/intervalMinutes +1 точек, max диапазон = 1 год
-  app.get('/api/objects/:objectId/data', async (req: Request, res: Response) => {
+  // Endpoint to get data for a specific sensor type of a composite device
+  // OLD Path: /api/objects/:objectId/data
+  // NEW Path: /api/composite-devices/:compositeDeviceId/data
+  app.get('/api/composite-devices/:compositeDeviceId/data', async (req: Request, res: Response) => {
     try {
-      const objectId = Number(req.params.objectId);
-      // Get 'type' query parameter, aliasing to avoid potential naming conflicts
+      const compositeDeviceId = Number(req.params.compositeDeviceId);
       const { start, end, intervalMinutes = '1', type: requestedTypeQuery } = req.query;
 
       const typeToUnitMap: Record<string, string | undefined> = {
@@ -223,19 +156,29 @@ async function startServer() {
       // Шаг в миллисекундах (min 1 минута)
       const stepMs = Math.max(Number(intervalMinutes) * 60_000, 60_000);
 
-      // Извлекаем все реальные замеры из БД
+      // Find the sensor_id for the given composite device and unit (derived from type)
+      const sensorQuery = await pool.query(
+        'SELECT id FROM sensors WHERE composite_device_id = $1 AND unit = $2',
+        [compositeDeviceId, targetUnit] // targetUnit is from typeToUnitMap
+      );
+
+      if (sensorQuery.rows.length === 0) {
+        // No specific sensor found for this composite device and unit type
+        return res.json([]); // Send empty array, frontend chart will show "No data"
+      }
+      const sensorId = sensorQuery.rows[0].id;
+
+      // Извлекаем все реальные замеры из БД для найденного sensorId
       const sql = `
         SELECT m.ts, m.value
         FROM measurements m
-        JOIN objects o ON m.object_id = o.id
-        WHERE m.object_id = $1
-          AND o.unit = $2
-          AND m.ts >= (timestamp with time zone 'epoch' + $3 * INTERVAL '1 ms')
-          AND m.ts <= (timestamp with time zone 'epoch' + $4 * INTERVAL '1 ms')
+        WHERE m.sensor_id = $1 -- Use sensorId here
+          AND m.ts >= (timestamp with time zone 'epoch' + $2 * INTERVAL '1 ms') -- startMs
+          AND m.ts <= (timestamp with time zone 'epoch' + $3 * INTERVAL '1 ms') -- endMs
         ORDER BY m.ts;
       `;
-      // Parameters for the query, now including targetUnit
-      const queryParams = [objectId, targetUnit, startMs, endMs];
+      // Parameters for the query, using sensorId
+      const queryParams = [sensorId, startMs, endMs];
 
       const { rows } = await pool.query<{ ts: Date; value: number }>(sql, queryParams);
 
