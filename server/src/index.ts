@@ -4,6 +4,8 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
+import cron from 'node-cron';
+import { generateAndInsertMeasurements } from './dataGenerator';
 
 dotenv.config();
 
@@ -180,6 +182,17 @@ async function startServer() {
 
   app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
+
+    // Schedule data generation after server starts
+    if (process.env.NODE_ENV !== 'test') {
+      cron.schedule('* * * * *', () => {
+        console.log('Cron job triggered: generating new measurements for target sensors...');
+        generateAndInsertMeasurements(pool).catch(err => {
+          console.error('Error during scheduled measurement generation:', err);
+        });
+      });
+      console.log('Scheduled data generation job to run every minute for target sensors.');
+    }
   });
 }
 
