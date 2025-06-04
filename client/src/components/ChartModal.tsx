@@ -306,6 +306,7 @@ const ChartModal: React.FC<ChartModalProps> = ({
           <div className="all-charts-area"> {/* Renamed from charts-container */}
             {metricsToRender.map(metricKey => {
               const currentMetricData = metricsData[metricKey];
+              const noData = currentMetricData.chartData.every(pt => pt.value === null) || currentMetricData.chartData.length === 0;
               return (
                 <div key={metricKey} className="chart-wrapper">
                   <h3>{titleMap[metricKey]}</h3>
@@ -329,9 +330,24 @@ const ChartModal: React.FC<ChartModalProps> = ({
                       />
                     </label>
                   </div>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart
-                      data={currentMetricData.chartData}
+                  <div style={{ position: 'relative', width: '100%', height: 300 }}>
+                    {noData && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        color: '#aaa',
+                        fontSize: '16px',
+                        textAlign: 'center',
+                        zIndex: 10, // Ensure it's above chart grid
+                      }}>
+                        Нет данных за выбранный период
+                      </div>
+                    )}
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart
+                        data={currentMetricData.chartData}
                       // style={{ backgroundColor: '#000', fontFamily: 'Roboto, sans-serif' }} // Moved to CSS (or default)
                     >
                       <CartesianGrid stroke="#444" />
@@ -358,14 +374,27 @@ const ChartModal: React.FC<ChartModalProps> = ({
                           fill: '#FFD014',
                           offset: 10,
                         }}
-                        domain={
-                          currentMetricData.chartData.some(d => d.value !== null)
-                            ? [
-                                currentMetricData.minBound !== '' ? Number(currentMetricData.minBound) : 'auto',
-                                currentMetricData.maxBound !== '' ? Number(currentMetricData.maxBound) : 'auto',
-                              ]
-                            : [0, 1]
-                        }
+                        domain={(() => {
+                          const dataExists = currentMetricData.chartData.some(d => d.value !== null);
+                          if (!dataExists) {
+                            return [0, 1]; // Default domain if no actual data points
+                          }
+
+                          const minBound = currentMetricData.minBound;
+                          const maxBound = currentMetricData.maxBound;
+
+                          let domainMin: number | 'auto' = 'auto';
+                          let domainMax: number | 'auto' = 'auto';
+
+                          if (minBound !== '' && !isNaN(Number(minBound))) {
+                            domainMin = Number(minBound);
+                          }
+                          if (maxBound !== '' && !isNaN(Number(maxBound))) {
+                            domainMax = Number(maxBound);
+                          }
+
+                          return [domainMin, domainMax];
+                        })()}
                       />
                       <Tooltip
                         contentStyle={{
@@ -405,11 +434,12 @@ const ChartModal: React.FC<ChartModalProps> = ({
                             />
                           );
                         }}
-                        connectNulls
+                        connectNulls // This is equivalent to connectNulls={true}
                         name={yAxisLabelMap[metricKey]}
                       />
                     </LineChart>
                   </ResponsiveContainer>
+                  </div> {/* Closes the div style={{ position: 'relative'...}} */}
                 </div>
               );
             })}
