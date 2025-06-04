@@ -119,7 +119,22 @@ async function startServer() {
   app.get('/api/objects/:objectId/data', async (req: Request, res: Response) => {
     try {
       const objectId = Number(req.params.objectId);
-      const { start, end, intervalMinutes = '1' } = req.query;
+      // Get 'type' query parameter, aliasing to avoid potential naming conflicts
+      const { start, end, intervalMinutes = '1', type: requestedTypeQuery } = req.query;
+
+      const typeToUnitMap: Record<string, string | undefined> = {
+        'temperature': 'Градус Цельсия',
+        'current': 'Ампер',
+        'voltage': 'Вольт',
+      };
+      const requestedType = requestedTypeQuery as string;
+      const targetUnit = typeToUnitMap[requestedType];
+
+      if (!targetUnit) {
+        // If type is not provided or invalid, return empty array for data.
+        // This ensures the frontend chart for this type will show "No data".
+        return res.json([]);
+      }
 
       // Парсим границы
       const now    = Date.now();
@@ -137,17 +152,19 @@ async function startServer() {
 
       // Извлекаем все реальные замеры из БД
       const sql = `
-        SELECT ts, value
-        FROM measurements
-        WHERE object_id = $1
-          AND ts >= (timestamp with time zone 'epoch' + $2 * INTERVAL '1 ms')
-          AND ts <= (timestamp with time zone 'epoch' + $3 * INTERVAL '1 ms')
-        ORDER BY ts;
+        SELECT m.ts, m.value
+        FROM measurements m
+        JOIN objects o ON m.object_id = o.id
+        WHERE m.object_id = $1
+          AND o.unit = $2
+          AND m.ts >= (timestamp with time zone 'epoch' + $3 * INTERVAL '1 ms')
+          AND m.ts <= (timestamp with time zone 'epoch' + $4 * INTERVAL '1 ms')
+        ORDER BY m.ts;
       `;
-      const { rows } = await pool.query<{ ts: Date; value: number }>(
-        sql,
-        [objectId, startMs, endMs]
-      );
+      // Parameters for the query, now including targetUnit
+      const queryParams = [objectId, targetUnit, startMs, endMs];
+
+      const { rows } = await pool.query<{ ts: Date; value: number }>(sql, queryParams);
 
       // Преобразуем в [{ t: ms, v: value }]
       const raw = rows.map(r => ({
@@ -155,22 +172,27 @@ async function startServer() {
         v: r.value,
       }));
 
-      // Собираем полный ряд точек
+      // Собираем полный ряд точек (New Resampling Logic)
       const result: Array<{ timestamp: string; value: number | null }> = [];
-      let idx = 0;
+      let rawDataIdx = 0;
+
       for (let t = startMs; t <= endMs; t += stepMs) {
-        if (idx < raw.length && Math.abs(raw[idx].t - t) < stepMs / 2) {
-          result.push({
-            timestamp: new Date(t).toISOString(),
-            value:     raw[idx].v,
-          });
-          idx++;
-        } else {
-          result.push({
-            timestamp: new Date(t).toISOString(),
-            value:     null,
-          });
-        }
+          // Skip raw data points that are definitively too old for this current tick t
+          // A point raw[rawDataIdx].t is too old if it's earlier than t by more than half the interval step.
+          while (rawDataIdx < raw.length && raw[rawDataIdx].t < t - (stepMs / 2) ) {
+              rawDataIdx++;
+          }
+
+          if (rawDataIdx < raw.length && Math.abs(raw[rawDataIdx].t - t) < (stepMs / 2) ) {
+              // If current raw point is close enough to t, use it
+              result.push({ timestamp: new Date(t).toISOString(), value: raw[rawDataIdx].v });
+              rawDataIdx++; // Consume this raw data point
+          } else {
+              // Otherwise, no suitable raw data point for this tick t using this simple lookahead.
+              result.push({ timestamp: new Date(t).toISOString(), value: null });
+              // Do not advance rawDataIdx here if raw[rawDataIdx].t is for a future t.
+              // The while loop at the start will handle advancing it if it becomes too old for the *next* t.
+          }
       }
 
       res.json(result);
