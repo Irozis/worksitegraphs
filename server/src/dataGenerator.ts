@@ -10,17 +10,20 @@ const SENSOR_TARGETS: SensorTarget[] = [
   {
     name: 'Датчик Температуры 1',
     unit: 'Градус Цельсия',
-    generateValue: () => parseFloat((18 + Math.random() * 12).toFixed(2)), // 18.00 - 30.00 °C
+    // Placeholder: 15-30 °C
+    generateValue: () => parseFloat((15 + Math.random() * 15).toFixed(2)),
   },
   {
     name: 'Датчик Напряжения 1',
     unit: 'Вольт',
-    generateValue: () => parseFloat((210 + Math.random() * 20).toFixed(2)), // 210.00 - 230.00 V
+    // Placeholder: 210-235 V
+    generateValue: () => parseFloat((210 + Math.random() * 25).toFixed(2)),
   },
   {
     name: 'Датчик Тока 1',
     unit: 'Ампер',
-    generateValue: () => parseFloat((0.5 + Math.random() * 9.5).toFixed(2)), // 0.50 - 10.00 A
+    // Placeholder: 1.0-7.5 A
+    generateValue: () => parseFloat((1 + Math.random() * 6.5).toFixed(2)),
   },
 ];
 
